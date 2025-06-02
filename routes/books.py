@@ -1,33 +1,46 @@
 # routes/books.py
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional # Import Optional
 
-# --- CRITICAL CHANGE: Use ABSOLUTE IMPORTS for modules at the project root ---
-# These imports assume that 'database', 'models', and 'schemas'
-# are directly accessible at the same level as main.py (the project root).
-import database # Import the entire database module
-import models   # Import the entire models module
-import schemas  # Import the entire schemas module
-# --- END CRITICAL CHANGE ---
+from database import get_db
+import schemas
+import models
 
 router = APIRouter()
 
-@router.get("/", response_model=List[schemas.Book])
-def get_books(db: Session = Depends(database.get_db)): # Access get_db via database.get_db
-    """
-    Retrieves a list of all books from the database.
-    """
-    return db.query(models.Book).all()
-
-@router.post("/", response_model=schemas.Book)
-def create_book(book: schemas.BookCreate, db: Session = Depends(database.get_db)): # Access get_db via database.get_db
-    """
-    Creates a new book entry in the database.
-    """
-    new_book = models.Book(**book.dict())
-    db.add(new_book)
+@router.post("/", response_model=schemas.Book, status_code=201)
+def create_book(book: schemas.BookCreate, db: Session = Depends(get_db)):
+    db_book = models.Book(**book.dict())
+    db.add(db_book)
     db.commit()
-    db.refresh(new_book)
-    return new_book
+    db.refresh(db_book)
+    return db_book
+
+@router.get("/", response_model=List[schemas.Book])
+def get_all_books(
+    title: Optional[str] = Query(None, description="Filter by book title (case-insensitive)"),
+    author: Optional[str] = Query(None, description="Filter by book author (case-insensitive)"),
+    genre: Optional[str] = Query(None, description="Filter by book genre (case-insensitive)"),
+    db: Session = Depends(get_db)
+):
+    query = db.query(models.Book)
+
+    if title:
+        query = query.filter(models.Book.title.ilike(f"%{title}%"))
+    if author:
+        query = query.filter(models.Book.author.ilike(f"%{author}%"))
+    if genre:
+        query = query.filter(models.Book.genre.ilike(f"%{genre}%"))
+
+    books = query.all()
+
+    if not books and (title or author or genre): # If no books found AND search parameters were used
+        raise HTTPException(status_code=404, detail="No books found matching the search criteria")
+    elif not books: # If no books found AND no search parameters were used (empty library)
+        return []
+
+    return books
+
+# You can add other CRUD operations like get_book_by_id, update_book, delete_book here later
