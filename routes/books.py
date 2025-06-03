@@ -28,6 +28,7 @@ def get_all_books(
     query = db.query(models.Book)
 
     if title:
+        # Use ilike for case-insensitive partial matching
         query = query.filter(models.Book.title.ilike(f"%{title}%"))
     if author:
         query = query.filter(models.Book.author.ilike(f"%{author}%"))
@@ -36,10 +37,9 @@ def get_all_books(
 
     books = query.all()
 
-    if not books and (title or author or genre): # If no books found AND search parameters were used
-        raise HTTPException(status_code=404, detail="No books found matching the search criteria")
-    elif not books: # If no books found AND no search parameters were used (empty library)
-        return []
+    # FastAPI will return an empty list if no books are found,
+    # so we don't necessarily need a 404 here unless you want to be explicit.
+    # The frontend will handle displaying "No books found."
 
     return books
 
